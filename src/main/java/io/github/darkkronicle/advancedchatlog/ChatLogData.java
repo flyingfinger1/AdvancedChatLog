@@ -45,7 +45,7 @@ public class ChatLogData implements IChatMessageProcessor {
         LogChatMessage log = new LogChatMessage(message);
         messages.add(0, log);
         AdvancedChatLog.logChatMessage(message.getOriginalText());
-        Screen screen = Minecraft.getInstance().gui.screen();
+        Screen screen = Minecraft.getInstance().screen;
         if (screen instanceof ChatLogScreen) {
             ((ChatLogScreen) screen).add(log);
         }
