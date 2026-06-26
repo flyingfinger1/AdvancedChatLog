@@ -10,29 +10,36 @@ package io.github.darkkronicle.advancedchatlog.gui;
 import fi.dy.masa.malilib.gui.GuiBase;
 import fi.dy.masa.malilib.gui.GuiTextFieldGeneric;
 import fi.dy.masa.malilib.gui.button.ButtonGeneric;
+import fi.dy.masa.malilib.render.GuiContext;
+import fi.dy.masa.malilib.render.RenderUtils;
 import fi.dy.masa.malilib.util.InfoUtils;
 import fi.dy.masa.malilib.util.StringUtils;
+import io.github.darkkronicle.advancedchatcore.chat.AdvancedChatScreen;
 import io.github.darkkronicle.advancedchatcore.chat.ChatMessage;
+import io.github.darkkronicle.advancedchatcore.chat.MessageSender;
 import io.github.darkkronicle.advancedchatcore.config.ConfigStorage;
 import io.github.darkkronicle.advancedchatcore.gui.ContextMenu;
 import io.github.darkkronicle.advancedchatcore.util.Colors;
 import io.github.darkkronicle.advancedchatcore.util.FindType;
 import io.github.darkkronicle.advancedchatcore.util.SearchUtils;
+import io.github.darkkronicle.advancedchatcore.util.SyncTaskQueue;
 import io.github.darkkronicle.advancedchatlog.AdvancedChatLog;
 import io.github.darkkronicle.advancedchatlog.ChatLogData;
 import io.github.darkkronicle.advancedchatlog.config.ChatLogConfigStorage;
 import io.github.darkkronicle.advancedchatlog.util.LogChatMessage;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ActiveTextCollector;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.util.Util;
-import org.apache.logging.log4j.Level;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -79,14 +86,14 @@ public class ChatLogScreen extends GuiBase {
     public void add(LogChatMessage message) {
         add(message.getMessage());
         if (currentScroll > 0) {
-            currentScroll += message.getMessage().getLineCount() * (client.textRenderer.fontHeight + 2);
+            currentScroll += message.getMessage().getLineCount() * (this.fontHeight + 2);
         }
     }
 
     public void add(ChatMessage message) {
         try {
             if (SearchUtils.isMatch(
-                    message.getDisplayText().getString(), search.getText(), findType)) {
+                    message.getDisplayText().getString(), search.getValue(), findType)) {
                 for (int i = 0; i < message.getLineCount(); i++) {
                     renderLines.add(0, message.getLines().get(i));
                 }
@@ -100,13 +107,13 @@ public class ChatLogScreen extends GuiBase {
     public void initGui() {
         super.initGui();
         setLines(ChatLogData.getInstance().getMessages());
-        int width = client.getWindow().getScaledWidth();
-        int height = client.getWindow().getScaledHeight();
-        search = new GuiTextFieldGeneric((width / 2) - 70, 6, 141, 20, textRenderer);
+        int width = this.mc.getWindow().getGuiScaledWidth();
+        int height = this.mc.getWindow().getGuiScaledHeight();
+        search = new GuiTextFieldGeneric((width / 2) - 70, 6, 141, 20, this.font);
         addTextField(
                 search,
                 (textField -> {
-                    searchText(textField.getText());
+                    searchText(textField.getValue());
                     return true;
                 })
         );
@@ -120,19 +127,18 @@ public class ChatLogScreen extends GuiBase {
                         findType = findType.cycle(false);
                     }
                     button.setDisplayString(findType.getDisplayName());
-                    searchText(search.getText());
+                    searchText(search.getValue());
                 }));
         send = new TextFieldRunnable(
                 2,
                 height - 15,
                 width - 4,
                 12,
-                textRenderer,
+                this.font,
                 (textFieldRunnable -> {
-                    String text = textFieldRunnable.getText();
-                    MutableText literal = Text.literal(text);
-                    client.player.sendMessage(literal, false);
-                    textFieldRunnable.setText("");
+                    String text = textFieldRunnable.getValue();
+                    MessageSender.getInstance().sendMessage(text);
+                    textFieldRunnable.setValue("");
                 })
         );
         addTextField(send, null);
@@ -140,18 +146,21 @@ public class ChatLogScreen extends GuiBase {
     }
 
     @Override
-    public boolean onMouseClicked(int mouseX, int mouseY, int mouseButton) {
-        if (super.onMouseClicked(mouseX, mouseY, mouseButton)) {
+    public boolean onMouseClicked(MouseButtonEvent mouseButtonEvent, boolean doubleClick) {
+        if (super.onMouseClicked(mouseButtonEvent, doubleClick)) {
             return true;
         }
+        int mouseX = (int) mouseButtonEvent.x();
+        int mouseY = (int) mouseButtonEvent.y();
+        int mouseButton = mouseButtonEvent.button();
         if (mouseButton == 1) {
             createContextMenu(mouseX, mouseY);
             return true;
         }
-        if (menu != null && menu.onMouseClicked(mouseX, mouseY, mouseButton)) {
+        if (menu != null && menu.onMouseClicked(mouseButtonEvent, doubleClick)) {
             return true;
         }
-        if (hasShiftDown()) {
+        if (isShiftDown()) {
             relativeScroll(mouseY);
             return true;
         }
@@ -163,26 +172,44 @@ public class ChatLogScreen extends GuiBase {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY)) {
+    public boolean onMouseDragged(MouseButtonEvent mouseButtonEvent, double deltaX, double deltaY) {
+        if (super.onMouseDragged(mouseButtonEvent, deltaX, deltaY)) {
             return true;
         }
-        if (hasShiftDown()) {
-            relativeScroll((int) mouseY);
+        if (isShiftDown()) {
+            relativeScroll((int) mouseButtonEvent.y());
             return true;
         }
         return false;
     }
 
+    private boolean handleTextClick(Style style) {
+        ClickEvent clickEvent = style.getClickEvent();
+        if (clickEvent == null) {
+            return false;
+        }
+        // The log viewer has no chat input, so vanilla routes a SuggestCommand click through the
+        // (no-op here) Screen.insertText, and defaultHandleClickEvent's own screen handling fights
+        // with us. Handle it directly: open the chat screen with the command prefilled, deferred one
+        // tick via SyncTaskQueue so we are not swapping screens mid-click (which closed it instantly).
+        if (clickEvent instanceof ClickEvent.SuggestCommand suggest) {
+            SyncTaskQueue.getInstance().add(1,
+                    () -> this.mc.setScreenAndShow(new AdvancedChatScreen(suggest.command())));
+            return true;
+        }
+        defaultHandleClickEvent(clickEvent, this.mc, this);
+        return true;
+    }
+
     public void relativeScroll(int y) {
         // Scroll click
-        int height = client.getWindow().getScaledHeight() - 100;
+        int height = this.mc.getWindow().getGuiScaledHeight() - 100;
         y -= 40;
         float percent = 1 - Math.max(0, Math.min((float) y / height, 1));
-        int newPix = (int) (percent * (renderLines.size() * (textRenderer.fontHeight + 2)));
+        int newPix = (int) (percent * (renderLines.size() * (this.fontHeight + 2)));
         scrollEnd = newPix;
         scrollStart = newPix;
-        lastScrollTime = Util.getMeasuringTimeMs();
+        lastScrollTime = Util.getMillis();
     }
 
 
@@ -200,10 +227,10 @@ public class ChatLogScreen extends GuiBase {
                 }
             } catch (PatternSyntaxException e) {
                 sorted.clear();
-                Text text = Text.literal(
-                        StringUtils.translate("advancedchatlog.message.regexerror")).fillStyle(
-                        Style.EMPTY.withColor(TextColor.fromFormatting(Formatting.RED)));
-                text.getSiblings().add(Text.literal(" " + e.getDescription()).fillStyle(Style.EMPTY.withColor(Colors.getInstance().getColorOrWhite("gray").color())));
+                MutableComponent text = Component.literal(
+                        StringUtils.translate("advancedchatlog.message.regexerror")).withStyle(
+                        Style.EMPTY.withColor(TextColor.fromLegacyFormat(ChatFormatting.RED)));
+                text.getSiblings().add(Component.literal(" " + e.getDescription()).withStyle(Style.EMPTY.withColor(Colors.getInstance().getColorOrWhite("gray").color())));
                 ChatMessage message = ChatMessage.builder().displayText(text).originalText(text).build();
                 sorted.add(new LogChatMessage(message));
                 break;
@@ -216,9 +243,9 @@ public class ChatLogScreen extends GuiBase {
         // Don't want jank
         messages = new ArrayList<>(messages);
         if (messages.isEmpty()) {
-            Text text = Text.literal(
+            MutableComponent text = Component.literal(
                     StringUtils.translate("advancedchatlog.message.none")
-            ).fillStyle(Style.EMPTY.withColor(TextColor.fromFormatting(Formatting.RED)));
+            ).withStyle(Style.EMPTY.withColor(TextColor.fromLegacyFormat(ChatFormatting.RED)));
             messages.add(new LogChatMessage(ChatMessage.builder().displayText(text).originalText(text).build()));
         }
         renderLines = new ArrayList<>();
@@ -231,14 +258,14 @@ public class ChatLogScreen extends GuiBase {
     }
 
     private void updateScroll() {
-        long time = Util.getMeasuringTimeMs();
+        long time = Util.getMillis();
         // Starting scroll + percent completed
         currentScroll = scrollStart + (
                 (scrollEnd - scrollStart) * (1 - ((ConfigStorage.Easing) ChatLogConfigStorage.General.SCROLL_TYPE.config.getOptionListValue()).apply(
                         1 - ((float) time - lastScrollTime) / ChatLogConfigStorage.General.SCROLL_TIME.config.getIntegerValue()
                 ))
         );
-        int fontHeight = (textRenderer.fontHeight + 2);
+        int fontHeight = (this.fontHeight + 2);
         if (currentScroll < 0) {
             // Make sure we can still see at least one line
             currentScroll = 0;
@@ -255,24 +282,24 @@ public class ChatLogScreen extends GuiBase {
     }
 
     @Override
-    public boolean onMouseScrolled(int mouseX, int mouseY, double horizontalAmount, double verticalAmount) {
+    public boolean onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (super.onMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount)) {
             return true;
         }
         // Update the scroll variables
         scrollEnd = currentScroll + verticalAmount * 10 * ChatLogConfigStorage.General.SCROLL_MULTIPLIER.config.getDoubleValue();
         scrollStart = currentScroll;
-        lastScrollTime = Util.getMeasuringTimeMs();
+        lastScrollTime = Util.getMillis();
         return true;
     }
 
     @Override
-    public void render(DrawContext drawContext, int mouseX, int mouseY, float partialTicks) {
-        super.render(drawContext, mouseX, mouseY, partialTicks);
+    protected void drawContents(GuiContext ctx, int mouseX, int mouseY, float partialTicks) {
+        super.drawContents(ctx, mouseX, mouseY, partialTicks);
         updateScroll();
-        int height = client.getWindow().getScaledHeight();
-        int width = client.getWindow().getScaledWidth();
-        int lineHeight = textRenderer.fontHeight + 2;
+        int height = this.mc.getWindow().getGuiScaledHeight();
+        int width = this.mc.getWindow().getGuiScaledWidth();
+        int lineHeight = this.fontHeight + 2;
         // 60 px top, 40 px bottom
         int lines = (int) Math.ceil((float) (height - 70 - lineHeight) / (lineHeight));
 
@@ -283,8 +310,8 @@ public class ChatLogScreen extends GuiBase {
         int y = -1 * ((int) currentScroll % lineHeight);
 
         // Scissor to keep boundaries for the half scroll
-        double scale = client.getWindow().getScaleFactor();
-        ScissorUtil.applyScissor(drawContext,
+        double scale = this.mc.getWindow().getGuiScale();
+        ScissorUtil.applyScissor(ctx,
                 0,
                 (int) (40 * scale),
                 (int) (width * scale),
@@ -295,57 +322,76 @@ public class ChatLogScreen extends GuiBase {
                 break;
             }
             ChatMessage.AdvancedChatLine line = renderLines.get(i);
-            drawContext.drawTextWithShadow(textRenderer,
+            ctx.drawString(this.font,
                     line.getText(),
                     10,
-                    height - y - 40 - fontHeight,
-                    Colors.getInstance().getColorOrWhite("white").color());
+                    height - y - 40 - this.fontHeight,
+                    Colors.getInstance().getColorOrWhite("white").color(),
+                    true);
             y += lineHeight;
         }
-        drawContext.disableScissor();
-        drawContext.drawCenteredTextWithShadow(textRenderer,
+        ScissorUtil.resetScissor(ctx);
+        ctx.drawCenteredString(this.font,
                 (scrollLine + 1) + "/" + renderLines.size(),
                 width / 2,
                 height - 28,
                 Colors.getInstance().getColorOrWhite("white").color());
-        drawContext.drawHoverEvent(textRenderer, getHoverStyle(mouseX, mouseY), mouseX, mouseY);
+        drawHoverStyle(ctx, getHoverStyle(mouseX, mouseY), mouseX, mouseY);
         if (menu != null) {
-            menu.render(drawContext, mouseX, mouseY, true);
+            menu.render(ctx, mouseX, mouseY, true);
+        }
+    }
+
+    /**
+     * 26.2: {@code DrawContext.drawHoverEvent} no longer exists. Render the {@code SHOW_TEXT}
+     * hover tooltip ourselves via {@code setTooltipForNextFrame}, mirroring vanilla's hover
+     * handling for the common (text) case.
+     */
+    private void drawHoverStyle(GuiContext ctx, Style style, int mouseX, int mouseY) {
+        if (style == null) {
+            return;
+        }
+        HoverEvent hoverEvent = style.getHoverEvent();
+        if (hoverEvent instanceof HoverEvent.ShowText showText) {
+            // MaLiLib's GuiContext render flow doesn't flush vanilla's deferred tooltip, so draw it
+            // immediately via MaLiLib (mirrors how Core renders hover text).
+            RenderUtils.drawHoverText(ctx, mouseX, mouseY,
+                    List.of(showText.value().getString().split("\n")));
         }
     }
 
     public void createContextMenu(int mouseX, int mouseY) {
-        LinkedHashMap<Text, ContextMenu.ContextConsumer> actions = new LinkedHashMap<>();
+        LinkedHashMap<Component, ContextMenu.ContextConsumer> actions = new LinkedHashMap<>();
         message = getMessage(mouseX, mouseY);
         if (message != null) {
-            Text data = Text.empty();
+            MutableComponent data = Component.empty();
             try {
                 data.getSiblings().add(
-                        Text.literal(
+                        Component.literal(
                                 message.getMessage().getTime().format(DateTimeFormatter.ofPattern(ConfigStorage.General.TIME_FORMAT.config.getStringValue()))
-                        ).fillStyle(Style.EMPTY.withFormatting(Formatting.AQUA))
+                        ).withStyle(Style.EMPTY.withColor(ChatFormatting.AQUA))
                 );
             } catch (IllegalArgumentException e) {
-                AdvancedChatLog.LOGGER.log(Level.WARN, "Can't format time for context menu!", e);
+                AdvancedChatLog.LOGGER.warn("Can't format time for context menu!", e);
             }
             if (message.getMessage().getOwner() != null) {
-                data.getSiblings().add(Text.literal(" - ").fillStyle(Style.EMPTY.withFormatting(Formatting.GRAY)));
-                if (message.getMessage().getOwner().getEntry().getDisplayName() != null) {
-                    data.getSiblings().add(message.getMessage().getOwner().getEntry().getDisplayName());
+                data.getSiblings().add(Component.literal(" - ").withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
+                if (message.getMessage().getOwner().getEntry().getTabListDisplayName() != null) {
+                    data.getSiblings().add(message.getMessage().getOwner().getEntry().getTabListDisplayName());
                 } else {
-                    data.getSiblings().add(Text.literal(message.getMessage().getOwner().getEntry().getProfile().getName()));
+                    data.getSiblings().add(Component.literal(message.getMessage().getOwner().getEntry().getProfile().name()));
                 }
             }
             if (!data.getString().isBlank()) {
                 actions.put(data, (x, y) -> {
                 });
             }
-            actions.put(Text.literal(StringUtils.translate("advancedchatlog.context.copy")), (x, y) -> {
-                MinecraftClient.getInstance().keyboard.setClipboard(message.getMessage().getOriginalText().getString());
+            actions.put(Component.literal(StringUtils.translate("advancedchatlog.context.copy")), (x, y) -> {
+                Minecraft.getInstance().keyboardHandler.setClipboard(message.getMessage().getOriginalText().getString());
                 InfoUtils.printActionbarMessage("advancedchatlog.context.copied");
             });
         }
-        actions.put(Text.literal(StringUtils.translate("advancedchatlog.context.clearallmessages")), (x, y) -> {
+        actions.put(Component.literal(StringUtils.translate("advancedchatlog.context.clearallmessages")), (x, y) -> {
             ChatLogData.getInstance().clear();
             setLines(ChatLogData.getInstance().getMessages());
         });
@@ -353,7 +399,8 @@ public class ChatLogScreen extends GuiBase {
     }
 
     public Style getHoverStyle(double mouseX, double mouseY) {
-        int lineHeight = textRenderer.fontHeight + 2;
+        int lineHeight = this.fontHeight + 2;
+        int height = this.mc.getWindow().getGuiScaledHeight();
         int lines = (int) Math.ceil((float) (height - 70 - lineHeight) / (lineHeight));
 
         // Current line scrolled
@@ -361,26 +408,27 @@ public class ChatLogScreen extends GuiBase {
 
         // Offset y for scrolling. Used for partially obstructed lines.
         int y = -1 * ((int) currentScroll % lineHeight);
-        int height = client.getWindow().getScaledHeight();
-        // Change the perspective of mouseY from where the text started.
-        mouseY = height - mouseY - 40;
-        mouseX = mouseX - 10;
+
+        // 26.2: StringSplitter/Font no longer expose getStyleAt; use the vanilla
+        // ActiveTextCollector finder, feeding each visible line at its on-screen position.
+        ActiveTextCollector.ClickableStyleFinder finder =
+                new ActiveTextCollector.ClickableStyleFinder(this.font, (int) mouseX, (int) mouseY);
 
         for (int i = scrollLine; i < scrollLine + lines; i++) {
             if (i >= renderLines.size()) {
                 break;
             }
-            if (y <= mouseY && y + lineHeight >= mouseY) {
-                ChatMessage.AdvancedChatLine line = renderLines.get(i);
-                return textRenderer.getTextHandler().getStyleAt(line.getText(), (int) mouseX);
-            }
+            ChatMessage.AdvancedChatLine line = renderLines.get(i);
+            int lineY = height - y - 40 - this.fontHeight;
+            finder.accept(10, lineY, line.getText());
             y += lineHeight;
         }
-        return null;
+        return finder.result();
     }
 
     public LogChatMessage getMessage(double mouseX, double mouseY) {
-        int lineHeight = textRenderer.fontHeight + 2;
+        int lineHeight = this.fontHeight + 2;
+        int height = this.mc.getWindow().getGuiScaledHeight();
         int lines = (int) Math.ceil((float) (height - 70 - lineHeight) / (lineHeight));
 
         // Current line scrolled
@@ -388,7 +436,6 @@ public class ChatLogScreen extends GuiBase {
 
         // Offset y for scrolling. Used for partially obstructed lines.
         int y = -1 * ((int) currentScroll % lineHeight);
-        int height = client.getWindow().getScaledHeight();
         // Change the perspective of mouseY from where the text started.
         mouseY = height - mouseY - 40;
 

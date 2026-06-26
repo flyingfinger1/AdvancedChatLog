@@ -23,8 +23,8 @@ import java.util.List;
 import lombok.Getter;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 
 @Environment(EnvType.CLIENT)
 public class ChatLogData implements IChatMessageProcessor {
@@ -45,7 +45,7 @@ public class ChatLogData implements IChatMessageProcessor {
         LogChatMessage log = new LogChatMessage(message);
         messages.add(0, log);
         AdvancedChatLog.logChatMessage(message.getOriginalText());
-        Screen screen = MinecraftClient.getInstance().currentScreen;
+        Screen screen = Minecraft.getInstance().gui.screen();
         if (screen instanceof ChatLogScreen) {
             ((ChatLogScreen) screen).add(log);
         }
@@ -63,7 +63,7 @@ public class ChatLogData implements IChatMessageProcessor {
         if (type != UpdateType.NEW) {
             return;
         }
-        int width = MinecraftClient.getInstance().getWindow().getScaledWidth() - 20;
+        int width = Minecraft.getInstance().getWindow().getGuiScaledWidth() - 20;
         add(message.shallowClone(width));
         while (messages.size()
                 > ChatLogConfigStorage.General.STORED_LINES.config.getIntegerValue()) {
@@ -97,7 +97,7 @@ public class ChatLogData implements IChatMessageProcessor {
             try {
                 array.add(serializer.save(message));
             } catch (Exception e) {
-                e.printStackTrace();
+                AdvancedChatLog.LOGGER.error("Failed to serialise a chat log line for saving", e);
             }
         }
         return array;
@@ -116,7 +116,7 @@ public class ChatLogData implements IChatMessageProcessor {
             try {
                 messages.add(serializer.load(e.getAsJsonObject()));
             } catch (Exception err) {
-                err.printStackTrace();
+                AdvancedChatLog.LOGGER.error("Failed to load a stored chat log line", err);
             }
         }
         for (int i = Math.min(ChatLogConfigStorage.General.RELOAD_LINES.config.getIntegerValue() - 1, messages.size() - 1); i >= 0; i--) {

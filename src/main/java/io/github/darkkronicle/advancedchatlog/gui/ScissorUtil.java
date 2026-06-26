@@ -9,7 +9,7 @@ package io.github.darkkronicle.advancedchatlog.gui;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 @Environment(EnvType.CLIENT)
 public class ScissorUtil {
@@ -17,11 +17,12 @@ public class ScissorUtil {
     private ScissorUtil() {
     }
 
-    public static void applyScissor(DrawContext drawContext, int x1, int y1, int x2, int y2) {
-        drawContext.enableScissor(x1, y1, x2 - x1, y2 - y1);
+    public static void applyScissor(GuiGraphicsExtractor drawContext, int x1, int y1, int x2, int y2) {
+        // 26.2: enableScissor takes corner coordinates (x1, y1, x2, y2).
+        drawContext.enableScissor(x1, y1, x2, y2);
     }
 
-    public static void resetScissor(DrawContext drawContext) {
+    public static void resetScissor(GuiGraphicsExtractor drawContext) {
         drawContext.disableScissor();
     }
 }

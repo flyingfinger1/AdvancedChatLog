@@ -7,8 +7,9 @@
  */
 package io.github.darkkronicle.advancedchatlog.util;
 
-import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.mojang.serialization.JsonOps;
 import io.github.darkkronicle.advancedchatcore.chat.ChatMessage;
 import io.github.darkkronicle.advancedchatcore.interfaces.IJsonSave;
 import io.github.darkkronicle.advancedchatlog.config.ChatLogConfigStorage;
@@ -18,16 +19,30 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 
 @Environment(EnvType.CLIENT)
 public class LogChatMessageSerializer implements IJsonSave<LogChatMessage> {
 
-    private static final Gson GSON = new Gson();
     private DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     public LogChatMessageSerializer() {}
+
+    /**
+     * 26.2: Component is no longer (de)serialised through a registered Gson {@code TypeAdapter}.
+     * The canonical path is {@link ComponentSerialization#CODEC} together with
+     * {@link JsonOps#INSTANCE}, which yields/consumes a Gson {@link JsonElement}.
+     */
+    private static JsonElement textToJson(Component text) {
+        return ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, text).getOrThrow();
+    }
+
+    private static Component jsonToText(JsonElement element) {
+        return ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, element).getOrThrow();
+    }
 
     private Style cleanStyle(Style style) {
         if (!ChatLogConfigStorage.General.CLEAN_SAVE.config.getBooleanValue()) {
@@ -39,11 +54,11 @@ public class LogChatMessageSerializer implements IJsonSave<LogChatMessage> {
         return style;
     }
 
-    private Text transfer(Text text) {
+    private Component transfer(Component text) {
         // Using the built in serializer LiteralText is required
-        Text base = Text.empty();
-        for (Text t : text.getSiblings()) {
-            Text newT = Text.literal(t.getString()).fillStyle(cleanStyle(t.getStyle()));
+        MutableComponent base = Component.empty();
+        for (Component t : text.getSiblings()) {
+            MutableComponent newT = Component.literal(t.getString()).withStyle(cleanStyle(t.getStyle()));
             base.getSiblings().add(newT);
         }
         return base;
@@ -54,8 +69,8 @@ public class LogChatMessageSerializer implements IJsonSave<LogChatMessage> {
         LocalDateTime dateTime = LocalDateTime.from(formatter.parse(obj.get("time").getAsString()));
         LocalDate date = dateTime.toLocalDate();
         LocalTime time = dateTime.toLocalTime();
-        Text display = GSON.fromJson(obj.get("display"), Text.class);
-        Text original = GSON.fromJson(obj.get("original"), Text.class);
+        Component display = jsonToText(obj.get("display"));
+        Component original = jsonToText(obj.get("original"));
         int stacks = obj.get("stacks").getAsByte();
         ChatMessage message =
                 ChatMessage.builder()
@@ -74,8 +89,8 @@ public class LogChatMessageSerializer implements IJsonSave<LogChatMessage> {
         LocalDateTime dateTime = LocalDateTime.of(message.getDate(), chat.getTime());
         json.addProperty("time", formatter.format(dateTime));
         json.addProperty("stacks", chat.getStacks());
-        json.add("display", GSON.toJsonTree(transfer(chat.getDisplayText())));
-        json.add("original", GSON.toJsonTree(transfer(chat.getOriginalText())));
+        json.add("display", textToJson(transfer(chat.getDisplayText())));
+        json.add("original", textToJson(transfer(chat.getOriginalText())));
         return json;
     }
 }

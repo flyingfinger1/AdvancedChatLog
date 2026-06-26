@@ -9,7 +9,8 @@ package io.github.darkkronicle.advancedchatlog.gui;
 
 import fi.dy.masa.malilib.gui.GuiTextFieldGeneric;
 import java.util.function.Consumer;
-import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 
 public class TextFieldRunnable extends GuiTextFieldGeneric {
@@ -21,18 +22,18 @@ public class TextFieldRunnable extends GuiTextFieldGeneric {
             int y,
             int width,
             int height,
-            TextRenderer textRenderer,
+            Font textRenderer,
             Consumer<TextFieldRunnable> onApply) {
         super(x, y, width, height, textRenderer);
         this.onApply = onApply;
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (super.keyPressed(keyCode, scanCode, modifiers)) {
+    public boolean keyPressed(KeyEvent keyEvent) {
+        if (super.keyPressed(keyEvent)) {
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_ENTER) {
+        if (keyEvent.key() == GLFW.GLFW_KEY_ENTER) {
             onApply.accept(this);
             return true;
         }

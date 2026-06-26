@@ -12,7 +12,7 @@ import io.github.darkkronicle.advancedchatcore.ModuleHandler;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -45,18 +45,8 @@ public class AdvancedChatLog implements ClientModInitializer {
         File dir = FileUtils.getMinecraftDirectoryAsPath().resolve("chatlogs").toFile();
         dir.mkdirs();
         CHAT_LOGGER = LoggerFactory.getLogger("chat");
-        LogManager.getLogger("chat");
         LoggerContext loggerContext = (LoggerContext) LogManager.getContext(false);
 
-//        FileAppender fileAppender =  FileAppender
-//                .newBuilder()
-//                .withFileName("chatlogs/latest.log")
-//                .setName("chatlog")
-//                .withBufferSize(100000)
-//                .withImmediateFlush(true)
-//                .withAppend(true)
-//                .build();
-//        fileAppender.start();
         RollingRandomAccessFileAppender rolling = RollingRandomAccessFileAppender
                 .newBuilder()
                 .setName("chatlogFile")
@@ -74,7 +64,7 @@ public class AdvancedChatLog implements ClientModInitializer {
         loggerContext.updateLoggers();
     }
 
-    public static void logChatMessage(Text text) {
+    public static void logChatMessage(Component text) {
         if (ChatLogData.isLoading()) {
             return;
         }
