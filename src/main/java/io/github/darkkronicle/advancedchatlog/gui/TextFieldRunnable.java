@@ -8,10 +8,10 @@
 package io.github.darkkronicle.advancedchatlog.gui;
 
 import fi.dy.masa.malilib.gui.GuiTextFieldGeneric;
+import fi.dy.masa.malilib.util.input.KeyCodes;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.input.KeyEvent;
-import org.lwjgl.glfw.GLFW;
 
 public class TextFieldRunnable extends GuiTextFieldGeneric {
 
@@ -33,7 +33,7 @@ public class TextFieldRunnable extends GuiTextFieldGeneric {
         if (super.keyPressed(keyEvent)) {
             return true;
         }
-        if (keyEvent.key() == GLFW.GLFW_KEY_ENTER) {
+        if (keyEvent.key() == KeyCodes.KEY_RETURN) {
             onApply.accept(this);
             return true;
         }
