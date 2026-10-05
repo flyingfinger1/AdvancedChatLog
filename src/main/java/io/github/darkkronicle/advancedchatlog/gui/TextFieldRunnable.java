@@ -7,8 +7,8 @@
  */
 package io.github.darkkronicle.advancedchatlog.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import fi.dy.masa.malilib.gui.GuiTextFieldGeneric;
-import fi.dy.masa.malilib.util.input.KeyCodes;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.input.KeyEvent;
@@ -33,7 +33,7 @@ public class TextFieldRunnable extends GuiTextFieldGeneric {
         if (super.keyPressed(keyEvent)) {
             return true;
         }
-        if (keyEvent.key() == KeyCodes.KEY_RETURN) {
+        if (keyEvent.input() == InputConstants.KEY_RETURN) {
             onApply.accept(this);
             return true;
         }

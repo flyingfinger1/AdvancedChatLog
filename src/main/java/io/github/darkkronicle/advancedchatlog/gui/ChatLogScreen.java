@@ -7,6 +7,7 @@
  */
 package io.github.darkkronicle.advancedchatlog.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import fi.dy.masa.malilib.gui.GuiBase;
 import fi.dy.masa.malilib.gui.GuiTextFieldGeneric;
 import fi.dy.masa.malilib.gui.button.ButtonGeneric;
@@ -121,7 +122,7 @@ public class ChatLogScreen extends GuiBase {
         addButton(
                 searchType,
                 ((button, mouseButton) -> {
-                    if (mouseButton == 0) {
+                    if (mouseButton == InputConstants.MOUSE_BUTTON_LEFT) {
                         findType = findType.cycle(true);
                     } else {
                         findType = findType.cycle(false);
@@ -153,7 +154,7 @@ public class ChatLogScreen extends GuiBase {
         int mouseX = (int) mouseButtonEvent.x();
         int mouseY = (int) mouseButtonEvent.y();
         int mouseButton = mouseButtonEvent.button();
-        if (mouseButton == 1) {
+        if (mouseButton == InputConstants.MOUSE_BUTTON_RIGHT) {
             createContextMenu(mouseX, mouseY);
             return true;
         }
